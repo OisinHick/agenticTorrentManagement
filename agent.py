@@ -41,7 +41,8 @@ logging.getLogger("qbittorrentapi").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # Configuration File Path
-STATE_DIR = os.environ.get("STATE_DIR", "agent-data")
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_DIR = os.environ.get("STATE_DIR", os.path.join(CURRENT_DIR, "agent-data"))
 CONFIG_PATH = os.path.join(STATE_DIR, "config.json")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 
@@ -431,10 +432,10 @@ async def startup_event():
 # Serve static web frontend
 @api.get("/", response_class=HTMLResponse)
 def read_root():
-    static_html_path = os.path.join(CONFIG_DIR, "..", "static", "index.html")
+    static_html_path = os.path.join(CURRENT_DIR, "static", "index.html")
     # Resolve relative path fallback
     if not os.path.exists(static_html_path):
-        static_html_path = "static/index.html"
+        static_html_path = os.path.join(STATE_DIR, "..", "static", "index.html")
         
     try:
         with open(static_html_path, "r") as f:
@@ -557,9 +558,9 @@ def clean_orphaned_endpoint(payload: dict = None):
     return res
 
 # Mount static folder assets
-static_assets_path = os.path.join(CONFIG_DIR, "..", "static")
+static_assets_path = os.path.join(CURRENT_DIR, "static")
 if not os.path.exists(static_assets_path):
-    static_assets_path = "static"
+    static_assets_path = os.path.join(STATE_DIR, "..", "static")
     
 api.mount("/static", StaticFiles(directory=static_assets_path), name="static")
 
