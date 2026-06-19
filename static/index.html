@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgenticTorrent | Autonomous Torrent Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="glow-bg glow-bg-1"></div>
+  <div class="glow-bg glow-bg-2"></div>
+
+  <div class="container">
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-icon">⇄</div>
+        <div>
+          <h1>AgenticTorrent</h1>
+          <p class="subtitle">Autonomous stuck recovery and orphaned data cleanups for qBittorrent</p>
+        </div>
+      </div>
+      <div class="status-indicator">
+        <span class="pulse-dot idle" id="global-status-dot"></span>
+        <span id="global-status-text">qBittorrent Standby</span>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <!-- Left Column: Settings -->
+      <section class="card settings-card">
+        <h2>Configuration</h2>
+        <div class="settings-scroll-container">
+          <form id="config-form">
+            <div class="section-divider">qBittorrent Credentials</div>
+            <div class="form-group">
+              <label for="qbittorrentHost">WebUI Host</label>
+              <input type="text" id="qbittorrentHost" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="qbittorrentPort">Port</label>
+                <input type="number" id="qbittorrentPort" required>
+              </div>
+              <div class="form-group">
+                <label style="visibility:hidden">Test</label>
+                <button type="button" class="btn btn-secondary btn-block" id="test-qbt-btn">Test</button>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="qbittorrentUsername">Username</label>
+                <input type="text" id="qbittorrentUsername" required>
+              </div>
+              <div class="form-group">
+                <label for="qbittorrentPassword">Password</label>
+                <input type="password" id="qbittorrentPassword" required>
+              </div>
+            </div>
+
+            <div class="section-divider">Recovery Thresholds</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="stuckLimitMinutes">Stuck Limit (Mins)</label>
+                <input type="number" id="stuckLimitMinutes" min="1" step="1" required>
+              </div>
+              <div class="form-group">
+                <label for="checkIntervalSeconds">Check Delay (Secs)</label>
+                <input type="number" id="checkIntervalSeconds" min="60" step="30" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="cronExpression">Cron Scheduling (Overrides Delay)</label>
+              <input type="text" id="cronExpression" placeholder="e.g. */15 * * * *">
+              <small class="help-text">Standard 5-field cron pattern.</small>
+            </div>
+
+            <div class="section-divider">Staged Recovery Options</div>
+            <div class="form-group checkbox-group">
+              <input type="checkbox" id="autoReannounce">
+              <label for="autoReannounce">Auto-Reannounce halfway to Stuck limit</label>
+            </div>
+            <div class="form-group checkbox-group">
+              <input type="checkbox" id="injectPublicTrackers">
+              <label for="injectPublicTrackers">Inject public trackers list at 75% limit</label>
+            </div>
+
+            <div class="section-divider">Orphaned Files Cleaner</div>
+            <div class="form-group">
+              <label for="downloadsDirPath">Local Downloads Volume Path</label>
+              <input type="text" id="downloadsDirPath" required>
+            </div>
+            <div class="form-group checkbox-group">
+              <input type="checkbox" id="enableOrphanedCleaner">
+              <label for="enableOrphanedCleaner">Enable Automatic Orphaned Cleanup</label>
+            </div>
+            <div class="form-group checkbox-group">
+              <input type="checkbox" id="orphanedCleanerDryRun">
+              <label for="orphanedCleanerDryRun">Dry-run mode (Only log, do not delete)</label>
+            </div>
+
+            <div class="section-divider">Exclusion Rules</div>
+            <div class="form-group">
+              <label for="excludeTags">Exclude Tags (Comma separated)</label>
+              <input type="text" id="excludeTags" placeholder="e.g. keep-stalled, seeding">
+            </div>
+            <div class="form-group">
+              <label for="excludeCategories">Exclude Categories (Comma separated)</label>
+              <input type="text" id="excludeCategories" placeholder="e.g. backup, archive">
+            </div>
+
+            <div class="section-divider">Webhook Notifications</div>
+            <div class="form-group">
+              <label for="webhookUrl">Webhook URL</label>
+              <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
+            </div>
+            <div class="form-group">
+              <label for="webhookType">Service Type</label>
+              <select id="webhookType">
+                <option value="discord">Discord</option>
+                <option value="gotify">Gotify</option>
+                <option value="generic">Generic JSON POST</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Save Configuration</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Right Column: Status & Queues -->
+      <div class="status-column">
+        <section class="card status-card">
+          <h2>Management Dashboard</h2>
+          
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-value" id="stat-runs">0</span>
+              <span class="stat-label">Check Cycles</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-value" id="stat-paused">0</span>
+              <span class="stat-label">Torrents Paused</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-value" id="stat-reannounced">0</span>
+              <span class="stat-label">Reannounced</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-value" id="stat-injected">0</span>
+              <span class="stat-label">Trackers Injected</span>
+            </div>
+          </div>
+
+          <div class="orphaned-cleaner-box">
+            <div class="orphaned-title">
+              <span>🧹 Orphaned Files Cleanups:</span>
+              <span id="stat-orphaned-data">0 files (0 MB)</span>
+            </div>
+            <div class="orphaned-actions">
+              <button class="btn btn-secondary btn-small" id="trigger-orphaned-dry-btn">Scan Dry-Run</button>
+              <button class="btn btn-danger btn-small" id="trigger-orphaned-live-btn">Execute Live Cleanup</button>
+            </div>
+          </div>
+
+          <div class="control-actions">
+            <button class="btn btn-accent btn-block" id="trigger-check-btn">
+              <span>⚡</span> Execute Check Turn Now
+            </button>
+          </div>
+        </section>
+
+        <!-- Torrents List -->
+        <section class="card torrents-card">
+          <h2>Active Client Torrents</h2>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Torrent Name</th>
+                  <th>Progress</th>
+                  <th>State</th>
+                  <th>Stuck Time</th>
+                  <th>Recovery</th>
+                </tr>
+              </thead>
+              <tbody id="torrents-list">
+                <tr><td colspan="5" class="empty-state">Load configuration to view active torrents.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Console Logs -->
+    <section class="card logs-card">
+      <div class="logs-header">
+        <h2>Daemon logs</h2>
+        <div class="log-actions">
+          <button class="btn btn-small btn-secondary" id="clear-logs-btn">Clear Logs</button>
+        </div>
+      </div>
+      <div class="console-output" id="console-output">
+        <div class="log-row info">Initialising AgenticTorrent logs...</div>
+      </div>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

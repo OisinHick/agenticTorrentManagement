@@ -1,0 +1,15 @@
+services:
+  agent-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-manager
+    ports:
+      - "4343:4343"
+    environment:
+      - STATE_DIR=/app/agent-data
+    volumes:
+      - ./agent-data:/app/agent-data
+      # Map your local downloads folder to allow orphaned file cleanups
+      - ./downloads:/downloads
+    restart: unless-stopped
