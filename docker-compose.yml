@@ -10,6 +10,7 @@ services:
       - STATE_DIR=/app/agent-data
     volumes:
       - ./agent-data:/app/agent-data
+      - ./static:/app/static
       # Map your local downloads folder to allow orphaned file cleanups
       - ./downloads:/downloads
     restart: unless-stopped

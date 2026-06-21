@@ -29,106 +29,124 @@
     </header>
 
     <main class="dashboard-grid">
-      <!-- Left Column: Settings -->
-      <section class="card settings-card">
-        <h2>Configuration</h2>
-        <div class="settings-scroll-container">
-          <form id="config-form">
-            <div class="section-divider">qBittorrent Credentials</div>
-            <div class="form-group">
-              <label for="qbittorrentHost">WebUI Host</label>
-              <input type="text" id="qbittorrentHost" required>
-            </div>
-            <div class="form-row">
+      <!-- Left Column: Settings & Trackers -->
+      <div class="settings-column" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <section class="card settings-card">
+          <h2>Configuration</h2>
+          <div class="settings-scroll-container">
+            <form id="config-form">
+              <div class="section-divider">qBittorrent Credentials</div>
               <div class="form-group">
-                <label for="qbittorrentPort">Port</label>
-                <input type="number" id="qbittorrentPort" required>
+                <label for="qbittorrentHost">WebUI Host</label>
+                <input type="text" id="qbittorrentHost" required>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="qbittorrentPort">Port</label>
+                  <input type="number" id="qbittorrentPort" required>
+                </div>
+                <div class="form-group">
+                  <label style="visibility:hidden">Test</label>
+                  <button type="button" class="btn btn-secondary btn-block" id="test-qbt-btn">Test</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="qbittorrentUsername">Username</label>
+                  <input type="text" id="qbittorrentUsername" required>
+                </div>
+                <div class="form-group">
+                  <label for="qbittorrentPassword">Password</label>
+                  <input type="password" id="qbittorrentPassword" required>
+                </div>
+              </div>
+
+              <div class="section-divider">Recovery Thresholds</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="stuckLimitMinutes">Stuck Limit (Mins)</label>
+                  <input type="number" id="stuckLimitMinutes" min="1" step="1" required>
+                </div>
+                <div class="form-group">
+                  <label for="checkIntervalSeconds">Check Delay (Secs)</label>
+                  <input type="number" id="checkIntervalSeconds" min="60" step="30" required>
+                </div>
               </div>
               <div class="form-group">
-                <label style="visibility:hidden">Test</label>
-                <button type="button" class="btn btn-secondary btn-block" id="test-qbt-btn">Test</button>
+                <label for="cronExpression">Cron Scheduling (Overrides Delay)</label>
+                <input type="text" id="cronExpression" placeholder="e.g. */15 * * * *">
+                <small class="help-text">Standard 5-field cron pattern.</small>
               </div>
-            </div>
-            <div class="form-row">
+
+              <div class="section-divider">Staged Recovery Options</div>
+              <div class="form-group checkbox-group">
+                <input type="checkbox" id="autoReannounce">
+                <label for="autoReannounce">Auto-Reannounce halfway to Stuck limit</label>
+              </div>
+              <div class="form-group checkbox-group">
+                <input type="checkbox" id="injectPublicTrackers">
+                <label for="injectPublicTrackers">Inject trackers at 75% limit</label>
+              </div>
+
+              <div class="section-divider">Orphaned Files Cleaner</div>
               <div class="form-group">
-                <label for="qbittorrentUsername">Username</label>
-                <input type="text" id="qbittorrentUsername" required>
+                <label for="downloadsDirPath">Local Downloads Volume Path</label>
+                <input type="text" id="downloadsDirPath" required>
+              </div>
+              <div class="form-group checkbox-group">
+                <input type="checkbox" id="enableOrphanedCleaner">
+                <label for="enableOrphanedCleaner">Enable Automatic Orphaned Cleanup</label>
+              </div>
+              <div class="form-group checkbox-group">
+                <input type="checkbox" id="orphanedCleanerDryRun">
+                <label for="orphanedCleanerDryRun">Dry-run mode (Only log, do not delete)</label>
+              </div>
+
+              <div class="section-divider">Exclusion Rules</div>
+              <div class="form-group">
+                <label for="excludeTags">Exclude Tags (Comma separated)</label>
+                <input type="text" id="excludeTags" placeholder="e.g. keep-stalled, seeding">
               </div>
               <div class="form-group">
-                <label for="qbittorrentPassword">Password</label>
-                <input type="password" id="qbittorrentPassword" required>
+                <label for="excludeCategories">Exclude Categories (Comma separated)</label>
+                <input type="text" id="excludeCategories" placeholder="e.g. backup, archive">
               </div>
-            </div>
 
-            <div class="section-divider">Recovery Thresholds</div>
-            <div class="form-row">
+              <div class="section-divider">Webhook Notifications</div>
               <div class="form-group">
-                <label for="stuckLimitMinutes">Stuck Limit (Mins)</label>
-                <input type="number" id="stuckLimitMinutes" min="1" step="1" required>
+                <label for="webhookUrl">Webhook URL</label>
+                <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
               </div>
               <div class="form-group">
-                <label for="checkIntervalSeconds">Check Delay (Secs)</label>
-                <input type="number" id="checkIntervalSeconds" min="60" step="30" required>
+                <label for="webhookType">Service Type</label>
+                <select id="webhookType">
+                  <option value="discord">Discord</option>
+                  <option value="gotify">Gotify</option>
+                  <option value="generic">Generic JSON POST</option>
+                </select>
               </div>
-            </div>
-            <div class="form-group">
-              <label for="cronExpression">Cron Scheduling (Overrides Delay)</label>
-              <input type="text" id="cronExpression" placeholder="e.g. */15 * * * *">
-              <small class="help-text">Standard 5-field cron pattern.</small>
-            </div>
 
-            <div class="section-divider">Staged Recovery Options</div>
-            <div class="form-group checkbox-group">
-              <input type="checkbox" id="autoReannounce">
-              <label for="autoReannounce">Auto-Reannounce halfway to Stuck limit</label>
-            </div>
-            <div class="form-group checkbox-group">
-              <input type="checkbox" id="injectPublicTrackers">
-              <label for="injectPublicTrackers">Inject public trackers list at 75% limit</label>
-            </div>
+              <button type="submit" class="btn btn-primary btn-block">Save Configuration</button>
+            </form>
+          </div>
+        </section>
 
-            <div class="section-divider">Orphaned Files Cleaner</div>
+        <section class="card tracker-card">
+          <h2>Tracker Database</h2>
+          <div class="tracker-info-box" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; background: hsla(222, 47%, 6%, 0.4); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.9rem;">
+            <span style="color: var(--text-secondary);">Total Cached Trackers:</span>
+            <strong id="custom-trackers-count" style="color: var(--color-success); font-family: var(--font-mono); font-size: 1.1rem;">0</strong>
+          </div>
+          <form id="tracker-upload-form">
             <div class="form-group">
-              <label for="downloadsDirPath">Local Downloads Volume Path</label>
-              <input type="text" id="downloadsDirPath" required>
+              <label for="trackerFile">Upload Trackers File (.txt)</label>
+              <input type="file" id="trackerFile" accept=".txt" style="display: block; width: 100%; font-size: 0.85rem; padding: 0.5rem; background: hsla(222, 47%, 6%, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-secondary); cursor: pointer;" required>
+              <small class="help-text">Line-separated list. Excludes duplicates and ignores invalid links.</small>
             </div>
-            <div class="form-group checkbox-group">
-              <input type="checkbox" id="enableOrphanedCleaner">
-              <label for="enableOrphanedCleaner">Enable Automatic Orphaned Cleanup</label>
-            </div>
-            <div class="form-group checkbox-group">
-              <input type="checkbox" id="orphanedCleanerDryRun">
-              <label for="orphanedCleanerDryRun">Dry-run mode (Only log, do not delete)</label>
-            </div>
-
-            <div class="section-divider">Exclusion Rules</div>
-            <div class="form-group">
-              <label for="excludeTags">Exclude Tags (Comma separated)</label>
-              <input type="text" id="excludeTags" placeholder="e.g. keep-stalled, seeding">
-            </div>
-            <div class="form-group">
-              <label for="excludeCategories">Exclude Categories (Comma separated)</label>
-              <input type="text" id="excludeCategories" placeholder="e.g. backup, archive">
-            </div>
-
-            <div class="section-divider">Webhook Notifications</div>
-            <div class="form-group">
-              <label for="webhookUrl">Webhook URL</label>
-              <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
-            </div>
-            <div class="form-group">
-              <label for="webhookType">Service Type</label>
-              <select id="webhookType">
-                <option value="discord">Discord</option>
-                <option value="gotify">Gotify</option>
-                <option value="generic">Generic JSON POST</option>
-              </select>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-block">Save Configuration</button>
+            <button type="submit" class="btn btn-secondary btn-block" id="upload-trackers-btn">Upload to Database</button>
           </form>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <!-- Right Column: Status & Queues -->
       <div class="status-column">
@@ -179,15 +197,16 @@
             <table>
               <thead>
                 <tr>
-                  <th>Torrent Name</th>
-                  <th>Progress</th>
-                  <th>State</th>
-                  <th>Stuck Time</th>
-                  <th>Recovery</th>
+                  <th class="cell-name">Torrent Name</th>
+                  <th class="cell-progress">Progress</th>
+                  <th class="cell-state">State</th>
+                  <th class="cell-stuck">Stuck Time</th>
+                  <th class="cell-recovery">Recovery</th>
+                  <th class="cell-actions" style="text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="torrents-list">
-                <tr><td colspan="5" class="empty-state">Load configuration to view active torrents.</td></tr>
+                <tr><td colspan="6" class="empty-state">Load configuration to view active torrents.</td></tr>
               </tbody>
             </table>
           </div>

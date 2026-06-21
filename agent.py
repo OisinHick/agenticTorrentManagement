@@ -3,9 +3,10 @@ import json
 import logging
 import asyncio
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 import httpx
 import qbittorrentapi
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -178,6 +179,23 @@ async def fetch_public_trackers():
         "udp://tracker.coppersurfer.tk:6969/announce"
     ]
 
+async def get_injectable_trackers():
+    trackers = []
+    trackers_path = os.path.join(STATE_DIR, "custom_trackers.txt")
+    if os.path.exists(trackers_path):
+        try:
+            with open(trackers_path, "r") as f:
+                trackers = [l.strip() for l in f if l.strip()]
+        except Exception as e:
+            logger.error(f"Error reading custom_trackers.txt: {e}")
+            
+    # If config allows public trackers or if we have no custom trackers, fetch public trackers
+    if config.get("injectPublicTrackers") or not trackers:
+        public_trackers = await fetch_public_trackers()
+        trackers = list(set(trackers + public_trackers))
+        
+    return trackers
+
 # Orphaned Files Cleaner
 def run_orphaned_cleanup():
     downloads_dir = config.get("downloadsDirPath", "/downloads")
@@ -279,8 +297,6 @@ async def run_agent_turn():
         torrents = client.torrents_info(status_filter="all")
         current_hashes = set()
         now = datetime.now(timezone.utc)
-        
-        load_state()
 
         stuck_hashes = []
         for t in torrents:
@@ -330,11 +346,11 @@ async def run_agent_turn():
                             config["stats"]["reannouncedCount"] += 1
                             save_config()
 
-                    # 2. 75% mark: inject public trackers
+                    # 2. 75% mark: inject trackers list
                     if duration >= (limit * 0.75) and state[h]["staged_stage"] == "reannounced":
-                        if config.get("injectPublicTrackers"):
-                            logger.info(f"Injecting public trackers list for stuck torrent '{name}'...")
-                            trackers = await fetch_public_trackers()
+                        logger.info(f"Injecting trackers list for stuck torrent '{name}'...")
+                        trackers = await get_injectable_trackers()
+                        if trackers:
                             client.torrents_add_trackers(torrent_hash=h, urls=trackers)
                             state[h]["staged_stage"] = "injected"
                             config["stats"]["injectedCount"] += 1
@@ -382,7 +398,7 @@ async def run_agent_turn():
 
         # Run Orphaned files cleaner automatically if enabled
         if config.get("enableOrphanedCleaner"):
-            run_orphaned_cleanup()
+            await asyncio.to_thread(run_orphaned_cleanup)
             
     except Exception as e:
         logger.error(f"Error executing agent turn: {e}", exc_info=True)
@@ -420,14 +436,16 @@ async def background_scheduler():
         except Exception as e:
             logger.error(f"Scheduler check cycle failed: {e}")
 
-# FastAPI endpoints
-api = FastAPI()
-load_config()
-
-# Startup background task creation
-@api.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: trigger background scheduler daemon
     asyncio.create_task(background_scheduler())
+    yield
+
+# FastAPI endpoints
+api = FastAPI(lifespan=lifespan)
+load_config()
+load_state()
 
 # Serve static web frontend
 @api.get("/", response_class=HTMLResponse)
@@ -474,10 +492,86 @@ def save_config_endpoint(payload: ConfigSchema):
         if not croniter.is_valid(payload.cronExpression):
             raise HTTPException(status_code=400, detail="Invalid Cron Expression formatting.")
             
-    config.update(payload.dict())
+    config.update(payload.model_dump())
     save_config()
     logger.info("Configuration updated via web control panel.")
     return {"message": "Configuration saved successfully", "config": config}
+
+@api.get("/api/trackers")
+def get_trackers_info():
+    trackers_path = os.path.join(STATE_DIR, "custom_trackers.txt")
+    total = 0
+    if os.path.exists(trackers_path):
+        try:
+            with open(trackers_path, "r") as f:
+                total = sum(1 for line in f if line.strip())
+        except Exception as e:
+            logger.error(f"Error reading trackers size: {e}")
+    return {"total": total}
+
+@api.post("/api/trackers/upload")
+async def upload_trackers(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        text = content.decode("utf-8")
+        new_trackers = []
+        for line in text.splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                if any(line.startswith(proto) for proto in ["udp://", "http://", "https://", "wss://"]):
+                    new_trackers.append(line)
+        
+        if not new_trackers:
+            raise HTTPException(status_code=400, detail="No valid tracker URLs found. URLs must start with udp://, http://, https://, or wss://")
+        
+        trackers_path = os.path.join(STATE_DIR, "custom_trackers.txt")
+        existing_trackers = set()
+        if os.path.exists(trackers_path):
+            with open(trackers_path, "r") as f:
+                for l in f:
+                    l = l.strip()
+                    if l:
+                        existing_trackers.add(l)
+        
+        added_count = 0
+        for tracker in new_trackers:
+            if tracker not in existing_trackers:
+                existing_trackers.add(tracker)
+                added_count += 1
+                
+        with open(trackers_path, "w") as f:
+            for tracker in sorted(existing_trackers):
+                f.write(tracker + "\n")
+                
+        logger.info(f"Custom Trackers Uploaded: Added {added_count} new trackers. Total database: {len(existing_trackers)} trackers.")
+        return {"success": True, "added": added_count, "total": len(existing_trackers)}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error uploading trackers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api.post("/api/torrent/{torrent_hash}/inject-trackers")
+async def inject_trackers_endpoint(torrent_hash: str):
+    client = get_qbt_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="qBittorrent offline")
+        
+    trackers = await get_injectable_trackers()
+    if not trackers:
+        raise HTTPException(status_code=400, detail="Tracker database is empty and fallback trackers failed to load.")
+        
+    try:
+        client.torrents_add_trackers(torrent_hash=torrent_hash, urls=trackers)
+        if torrent_hash in state:
+            state[torrent_hash]["staged_stage"] = "injected"
+            save_state()
+            
+        logger.info(f"Manually injected {len(trackers)} trackers into torrent '{torrent_hash}'.")
+        return {"success": True, "message": f"Successfully injected {len(trackers)} trackers."}
+    except Exception as e:
+        logger.error(f"Failed manual inject: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api.post("/api/test-qbt")
 def test_qbt_endpoint(payload: dict):
@@ -507,8 +601,6 @@ def get_status_endpoint():
     torrents_list = []
     if qbt_connected:
         try:
-            # Load active state
-            load_state()
             torrents = client.torrents_info(status_filter="all")
             for t in torrents:
                 stuck_info = state.get(t.hash, {})
@@ -536,6 +628,11 @@ def get_status_endpoint():
 @api.get("/api/logs")
 def get_logs_endpoint():
     return log_handler.buffer
+
+@api.post("/api/logs/clear")
+def clear_logs_endpoint():
+    log_handler.buffer.clear()
+    return {"message": "Logs cleared successfully"}
 
 @api.post("/api/trigger")
 async def trigger_check_endpoint():
