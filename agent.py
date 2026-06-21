@@ -120,7 +120,7 @@ async def send_notification(title, message):
             payload = {}
             if w_type == "discord":
                 payload = {
-                    "username": "AgenticTorrent",
+                    "username": "Auto Torrent",
                     "embeds": [{
                         "title": title,
                         "description": message,
