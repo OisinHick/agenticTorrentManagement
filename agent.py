@@ -145,20 +145,52 @@ async def send_notification(title, message):
     except Exception as e:
         logger.warning(f"Notification dispatch failed: {e}")
 
+# Cached qBittorrent client
+_qbt_client = None
+
+def normalize_host(host: str) -> str:
+    if host and not (host.startswith("http://") or host.startswith("https://")):
+        return f"http://{host}"
+    return host
+
 # Connect to qBittorrent
 def get_qbt_client():
-    try:
-        client = qbittorrentapi.Client(
-            host=config["qbittorrentHost"],
-            port=config["qbittorrentPort"],
-            username=config["qbittorrentUsername"],
-            password=config["qbittorrentPassword"]
-        )
-        client.auth_log_in()
-        return client
-    except Exception as e:
-        logger.error(f"Failed to connect to qBittorrent: {e}")
-        return None
+    global _qbt_client
+    if _qbt_client is not None:
+        # If connection parameters in config have changed, invalidate cached client
+        expected_host = normalize_host(config["qbittorrentHost"])
+        if (
+            _qbt_client.host != expected_host or
+            _qbt_client.port != config["qbittorrentPort"] or
+            _qbt_client.username != config["qbittorrentUsername"] or
+            getattr(_qbt_client, "_password", None) != config["qbittorrentPassword"]
+        ):
+            logger.info("qBittorrent connection configuration changed. Resetting cached client.")
+            try:
+                _qbt_client.auth_log_out()
+            except Exception:
+                pass
+            _qbt_client = None
+
+    if _qbt_client is None:
+        try:
+            host = normalize_host(config["qbittorrentHost"])
+            client = qbittorrentapi.Client(
+                host=host,
+                port=config["qbittorrentPort"],
+                username=config["qbittorrentUsername"],
+                password=config["qbittorrentPassword"],
+                FORCE_SCHEME_FROM_HOST=True,
+                REQUESTS_ARGS={"timeout": 3.5},
+                HTTPADAPTER_ARGS={"max_retries": 0}
+            )
+            client.auth_log_in()
+            _qbt_client = client
+            logger.info("Successfully connected and authenticated with qBittorrent.")
+        except Exception as e:
+            logger.error(f"Failed to connect to qBittorrent: {e}")
+            _qbt_client = None
+    return _qbt_client
 
 # Fetch public trackers
 async def fetch_public_trackers():
@@ -259,6 +291,9 @@ def run_orphaned_cleanup():
         }
     except Exception as e:
         logger.error(f"Error running orphaned cleaner: {e}")
+        if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
+            global _qbt_client
+            _qbt_client = None
         return {"error": str(e)}
 
 # Staged actions tracker
@@ -402,6 +437,9 @@ async def run_agent_turn():
             
     except Exception as e:
         logger.error(f"Error executing agent turn: {e}", exc_info=True)
+        if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
+            global _qbt_client
+            _qbt_client = None
 
 # Asynchronous Background Daemon Scheduler
 async def background_scheduler():
@@ -486,12 +524,27 @@ def get_config_endpoint():
 
 @api.post("/api/config")
 def save_config_endpoint(payload: ConfigSchema):
-    global config
+    global config, _qbt_client
     
     if payload.cronExpression.strip():
         if not croniter.is_valid(payload.cronExpression):
             raise HTTPException(status_code=400, detail="Invalid Cron Expression formatting.")
             
+    # Reset cached client if credentials/connection parameters change
+    if (
+        config.get("qbittorrentHost") != payload.qbittorrentHost or
+        config.get("qbittorrentPort") != payload.qbittorrentPort or
+        config.get("qbittorrentUsername") != payload.qbittorrentUsername or
+        config.get("qbittorrentPassword") != payload.qbittorrentPassword
+    ):
+        logger.info("qBittorrent credentials updated in configuration endpoint. Resetting client.")
+        if _qbt_client is not None:
+            try:
+                _qbt_client.auth_log_out()
+            except Exception:
+                pass
+            _qbt_client = None
+
     config.update(payload.model_dump())
     save_config()
     logger.info("Configuration updated via web control panel.")
@@ -571,21 +624,33 @@ async def inject_trackers_endpoint(torrent_hash: str):
         return {"success": True, "message": f"Successfully injected {len(trackers)} trackers."}
     except Exception as e:
         logger.error(f"Failed manual inject: {e}")
+        if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
+            global _qbt_client
+            _qbt_client = None
         raise HTTPException(status_code=500, detail=str(e))
 
 @api.post("/api/test-qbt")
 def test_qbt_endpoint(payload: dict):
-    host = payload.get("host", "localhost")
-    port = int(payload.get("port", 8080))
+    host_raw = payload.get("host", "localhost")
+    port_raw = payload.get("port", 8080)
+    try:
+        port = int(port_raw) if port_raw else 8080
+    except ValueError:
+        return {"success": False, "error": f"Invalid port value: {port_raw}"}
+        
     username = payload.get("username", "admin")
     password = payload.get("password", "adminadmin")
     
     try:
+        host = normalize_host(host_raw)
         client = qbittorrentapi.Client(
             host=host,
             port=port,
             username=username,
-            password=password
+            password=password,
+            FORCE_SCHEME_FROM_HOST=True,
+            REQUESTS_ARGS={"timeout": 3.5},
+            HTTPADAPTER_ARGS={"max_retries": 0}
         )
         client.auth_log_in()
         ver = client.app.version
@@ -618,6 +683,9 @@ def get_status_endpoint():
                 })
         except Exception as e:
             logger.error(f"Error compile status: {e}")
+            if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
+                global _qbt_client
+                _qbt_client = None
             
     return {
         "qbtConnected": qbt_connected,
