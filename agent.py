@@ -606,6 +606,47 @@ async def upload_trackers(file: UploadFile = File(...)):
 
 @api.post("/api/torrent/{torrent_hash}/inject-trackers")
 async def inject_trackers_endpoint(torrent_hash: str):
+    mock_hashes = {
+        "7d9c8e76a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0",
+        "f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5",
+        "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+        "c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6",
+        "0f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e",
+        "b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7",
+        "d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8",
+        "e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9",
+        "f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0",
+        "a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1",
+        "b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2",
+        "c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3",
+        "d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4",
+        "e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5",
+        "f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6",
+        "a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7",
+        "b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8",
+        "c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9",
+        "d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0",
+        "e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1",
+        "e1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2",
+        "f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3",
+        "a3b2c1d0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4",
+        "b4c3d2e1f0a9b8c7d6e5f4a3f2e1d0c9b8a7f6e5",
+        "c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6",
+        "d6e5f4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7",
+        "e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9d8",
+        "f8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9",
+        "0a9b8c7d6e5f4a3b2c1d0e9d8c7b6a5f4e3d2c1b",
+        "1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c",
+        "2c1d0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f",
+        "3d2e1f0a9b8c7d6e5f4a3b2c1d0e9d8c7b6a5f4e",
+        "4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d",
+        "5f4a3b2c1d0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c",
+        "6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f"
+    }
+    if torrent_hash in mock_hashes:
+        logger.info(f"Mock manual inject: simulated injection of trackers into mock torrent '{torrent_hash}'.")
+        return {"success": True, "message": "Successfully injected 20 trackers."}
+
     client = get_qbt_client()
     if not client:
         raise HTTPException(status_code=503, detail="qBittorrent offline")
@@ -686,6 +727,432 @@ def get_status_endpoint():
             if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
                 global _qbt_client
                 _qbt_client = None
+    
+    if not qbt_connected:
+        qbt_connected = True  # Show active visual states for test view
+        logger.info("Serving mock test torrent data for dashboard visual testing.")
+        torrents_list = [
+            {
+                "name": "Big Buck Bunny 1080p (2008)",
+                "hash": "7d9c8e76a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0",
+                "state": "stalledDL",
+                "progress": 42.5,
+                "size": 1546188226,
+                "category": "movies",
+                "tags": "keep-stalled",
+                "duration_stuck": 12.5,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Ubuntu Linux 26.04 LTS Desktop (amd64)",
+                "hash": "f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5",
+                "state": "downloading",
+                "progress": 87.2,
+                "size": 4724464025,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Arch Linux Installation ISO (2026.06.30)",
+                "hash": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+                "state": "stalledDL",
+                "progress": 12.0,
+                "size": 954204160,
+                "category": "operating-systems",
+                "tags": "recovery-active",
+                "duration_stuck": 28.4,
+                "staged_stage": "injected",
+                "stuck": True
+            },
+            {
+                "name": "Sintel Open Source Movie (4K)",
+                "hash": "c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6",
+                "state": "pausedDL",
+                "progress": 0.0,
+                "size": 8589934592,
+                "category": "movies",
+                "tags": "",
+                "duration_stuck": 18.0,
+                "staged_stage": "reannounced",
+                "stuck": False
+            },
+            {
+                "name": "Debian GNU/Linux 13.0 Netinst (i386)",
+                "hash": "0f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e",
+                "state": "seeding",
+                "progress": 100.0,
+                "size": 408944640,
+                "category": "None",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Blender 3.6 LTS Source Code (zip)",
+                "hash": "b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7",
+                "state": "downloading",
+                "progress": 94.1,
+                "size": 154128000,
+                "category": "development",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Tears of Steel 4K UHD (2012)",
+                "hash": "d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8",
+                "state": "stalledDL",
+                "progress": 1.5,
+                "size": 12456000000,
+                "category": "movies",
+                "tags": "recovery-active",
+                "duration_stuck": 45.2,
+                "staged_stage": "injected",
+                "stuck": True
+            },
+            {
+                "name": "FreeBSD 15.0-RELEASE (x86_64)",
+                "hash": "e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9",
+                "state": "seeding",
+                "progress": 100.0,
+                "size": 1073741824,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Alpine Linux 3.20.0 Virtual ISO",
+                "hash": "f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0",
+                "state": "downloading",
+                "progress": 5.2,
+                "size": 52428800,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Cosmos Laundromat (Animated Short)",
+                "hash": "a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1",
+                "state": "stalledDL",
+                "progress": 68.0,
+                "size": 2147483648,
+                "category": "movies",
+                "tags": "",
+                "duration_stuck": 15.0,
+                "staged_stage": "reannounced",
+                "stuck": False
+            },
+            {
+                "name": "Fedora Workstation 44 Live ISO",
+                "hash": "b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2",
+                "state": "downloading",
+                "progress": 50.0,
+                "size": 2147483648,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "RetroArch BIOS Pack & Emulators",
+                "hash": "c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3",
+                "state": "stalledDL",
+                "progress": 0.0,
+                "size": 536870912,
+                "category": "games",
+                "tags": "",
+                "duration_stuck": 6.5,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Debian 12 Live Gnome (amd64)",
+                "hash": "d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4",
+                "state": "downloading",
+                "progress": 77.5,
+                "size": 3145728000,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Alpine Linux Extended 3.20.0 ISO",
+                "hash": "e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5",
+                "state": "downloading",
+                "progress": 15.0,
+                "size": 838860800,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Kali Linux Live Installer (2026.2)",
+                "hash": "f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6",
+                "state": "stalledDL",
+                "progress": 8.9,
+                "size": 4194304000,
+                "category": "operating-systems",
+                "tags": "recovery-active",
+                "duration_stuck": 35.0,
+                "staged_stage": "reannounced",
+                "stuck": False
+            },
+            {
+                "name": "Tails OS USB Installer (v6.4)",
+                "hash": "a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7",
+                "state": "downloading",
+                "progress": 60.2,
+                "size": 1342177280,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "OpenBSD Installation ISO 7.5",
+                "hash": "b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8",
+                "state": "seeding",
+                "progress": 100.0,
+                "size": 629145600,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Linux Mint 22 Cinnamon Edition",
+                "hash": "c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9",
+                "state": "downloading",
+                "progress": 31.4,
+                "size": 3040870400,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Arch Linux Bootable ISO (v2026.07)",
+                "hash": "d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0",
+                "state": "stalledDL",
+                "progress": 5.0,
+                "size": 943718400,
+                "category": "operating-systems",
+                "tags": "recovery-active",
+                "duration_stuck": 112.1,
+                "staged_stage": "injected",
+                "stuck": True
+            },
+            {
+                "name": "Pop!_OS Intel/NVIDIA LTS ISO",
+                "hash": "e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1",
+                "state": "downloading",
+                "progress": 99.9,
+                "size": 3565158400,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Manjaro Linux Gnome Edition",
+                "hash": "e1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2",
+                "state": "downloading",
+                "progress": 45.8,
+                "size": 3670016000,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "CentOS Stream 9 Boot ISO",
+                "hash": "f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3",
+                "state": "stalledDL",
+                "progress": 22.4,
+                "size": 9233376000,
+                "category": "operating-systems",
+                "tags": "recovery-active",
+                "duration_stuck": 88.0,
+                "staged_stage": "reannounced",
+                "stuck": False
+            },
+            {
+                "name": "Slackware Installation DVD",
+                "hash": "a3b2c1d0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4",
+                "state": "downloading",
+                "progress": 5.0,
+                "size": 4724464000,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Gentoo Minimal Install CD",
+                "hash": "b4c3d2e1f0a9b8c7d6e5f4a3f2e1d0c9b8a7f6e5",
+                "state": "seeding",
+                "progress": 100.0,
+                "size": 471859200,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Alpine Linux Netboot Kernel",
+                "hash": "c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6",
+                "state": "downloading",
+                "progress": 81.3,
+                "size": 15412800,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Mageia 9 Live GNOME DVD",
+                "hash": "d6e5f4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7",
+                "state": "stalledDL",
+                "progress": 1.1,
+                "size": 4194304000,
+                "category": "operating-systems",
+                "tags": "recovery-active",
+                "duration_stuck": 210.0,
+                "staged_stage": "injected",
+                "stuck": True
+            },
+            {
+                "name": "MX Linux x64 ISO Desktop",
+                "hash": "e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9d8",
+                "state": "downloading",
+                "progress": 62.0,
+                "size": 2306867200,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Solus Gnome Desktop Edition",
+                "hash": "f8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9",
+                "state": "seeding",
+                "progress": 100.0,
+                "size": 2726297600,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Void Linux XBPS Live ISO",
+                "hash": "0a9b8c7d6e5f4a3b2c1d0e9d8c7b6a5f4e3d2c1b",
+                "state": "downloading",
+                "progress": 9.4,
+                "size": 943718400,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "NixOS Minimal Install ISO",
+                "hash": "1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c",
+                "state": "stalledDL",
+                "progress": 55.0,
+                "size": 1024000000,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 15.0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Rocky Linux Minimal Boot ISO",
+                "hash": "2c1d0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f",
+                "state": "downloading",
+                "progress": 89.0,
+                "size": 2831155200,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "openSUSE Tumbleweed Live DVD",
+                "hash": "3d2e1f0a9b8c7d6e5f4a3b2c1d0e9d8c7b6a5f4e",
+                "state": "downloading",
+                "progress": 14.5,
+                "size": 4724464000,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "EndeavourOS Galileo Installer",
+                "hash": "4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d",
+                "state": "stalledDL",
+                "progress": 0.0,
+                "size": 2097152000,
+                "category": "operating-systems",
+                "tags": "recovery-active",
+                "duration_stuck": 120.5,
+                "staged_stage": "injected",
+                "stuck": True
+            },
+            {
+                "name": "Lubuntu 24.04 LTS Desktop",
+                "hash": "5f4a3b2c1d0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c",
+                "state": "seeding",
+                "progress": 100.0,
+                "size": 3019898880,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            },
+            {
+                "name": "Puppy Linux Frugal ISO",
+                "hash": "6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f",
+                "state": "downloading",
+                "progress": 98.2,
+                "size": 471859200,
+                "category": "operating-systems",
+                "tags": "",
+                "duration_stuck": 0,
+                "staged_stage": "none",
+                "stuck": False
+            }
+        ]
             
     return {
         "qbtConnected": qbt_connected,

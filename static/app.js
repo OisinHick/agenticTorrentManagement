@@ -44,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const consoleOutput = document.getElementById('console-output');
 
   let lastLogsJson = '';
+  let currentTorrents = [];
+  let currentQbtConnected = false;
+  let sortColumn = null;
+  let sortOrder = 'asc';
 
   // Load config from server
   async function loadConfig() {
@@ -72,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       webhookUrlInput.value = data.webhookUrl || '';
       webhookTypeInput.value = data.webhookType || 'discord';
+      setTimeout(adjustPanelsHeight, 50);
     } catch (err) {
       appendLog('error', `Failed to fetch settings config: ${err.message}`);
     }
@@ -341,6 +346,69 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function getRecoveryText(t) {
+    if (t.stuck) return 'Stuck & Paused';
+    if (t.staged_stage === 'injected') return 'Trackers Injected';
+    if (t.staged_stage === 'reannounced') return 'Reannounced';
+    if (t.duration_stuck > 0) return 'Tracking Stalled';
+    return 'Normal';
+  }
+
+  function updateSortHeadersUI() {
+    document.querySelectorAll('th.sortable').forEach(th => {
+      const col = th.getAttribute('data-sort');
+      const iconSpan = th.querySelector('.sort-icon');
+      if (col === sortColumn) {
+        iconSpan.innerHTML = sortOrder === 'asc' ? ' ▲' : ' ▼';
+      } else {
+        iconSpan.innerHTML = '';
+      }
+    });
+  }
+
+  function renderTorrents() {
+    let torrentsToSort = [...currentTorrents];
+    if (sortColumn) {
+      torrentsToSort.sort((a, b) => {
+        let valA, valB;
+        if (sortColumn === 'name') {
+          valA = (a.name || '').toLowerCase();
+          valB = (b.name || '').toLowerCase();
+        } else if (sortColumn === 'progress') {
+          valA = parseFloat(a.progress) || 0;
+          valB = parseFloat(b.progress) || 0;
+        } else if (sortColumn === 'state') {
+          valA = (a.state || '').toLowerCase();
+          valB = (b.state || '').toLowerCase();
+        } else if (sortColumn === 'stuck') {
+          valA = parseInt(a.duration_stuck) || 0;
+          valB = parseInt(b.duration_stuck) || 0;
+        } else if (sortColumn === 'recovery') {
+          valA = getRecoveryText(a).toLowerCase();
+          valB = getRecoveryText(b).toLowerCase();
+        }
+        
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    updateTorrentsTable(torrentsToSort, currentQbtConnected);
+    adjustPanelsHeight();
+  }
+
+  function adjustPanelsHeight() {
+    const settingsCard = document.querySelector('.settings-card');
+    const torrentsCard = document.querySelector('.torrents-card');
+    if (settingsCard && torrentsCard) {
+      if (window.innerWidth > 1200) {
+        torrentsCard.style.height = `${settingsCard.offsetHeight}px`;
+      } else {
+        torrentsCard.style.height = '';
+      }
+    }
+  }
+
   // Fetch status details
   async function fetchStatus() {
     try {
@@ -369,7 +437,9 @@ document.addEventListener('DOMContentLoaded', () => {
       statOrphanedData.innerText = `${cleanedCount} files (${cleanedMB} MB)`;
 
       // Render Torrent list with fine-grained updates
-      updateTorrentsTable(data.torrents, data.qbtConnected);
+      currentTorrents = data.torrents || [];
+      currentQbtConnected = !!data.qbtConnected;
+      renderTorrents();
       
     } catch (err) {
       console.error('Failed to fetch status:', err);
@@ -529,6 +599,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Init sorting headers and listeners
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.getAttribute('data-sort');
+      if (sortColumn === col) {
+        sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortColumn = col;
+        sortOrder = 'asc';
+      }
+      updateSortHeadersUI();
+      renderTorrents();
+    });
+  });
+
+  // Adjust panel heights on window resize
+  window.addEventListener('resize', adjustPanelsHeight);
 
   // Init loops
   loadConfig();
