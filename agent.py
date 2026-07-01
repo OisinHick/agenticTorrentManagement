@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import logging
 import asyncio
@@ -145,8 +146,11 @@ async def send_notification(title, message):
     except Exception as e:
         logger.warning(f"Notification dispatch failed: {e}")
 
-# Cached qBittorrent client
+# Cached qBittorrent client and connection rate-limiting/backoff state
 _qbt_client = None
+_qbt_last_failed_settings = None
+_qbt_consecutive_failures = 0
+_qbt_cooldown_until = 0.0
 
 def normalize_host(host: str) -> str:
     if host and not (host.startswith("http://") or host.startswith("https://")):
@@ -155,7 +159,22 @@ def normalize_host(host: str) -> str:
 
 # Connect to qBittorrent
 def get_qbt_client():
-    global _qbt_client
+    global _qbt_client, _qbt_last_failed_settings, _qbt_consecutive_failures, _qbt_cooldown_until
+
+    current_settings = (
+        config.get("qbittorrentHost"),
+        config.get("qbittorrentPort"),
+        config.get("qbittorrentUsername"),
+        config.get("qbittorrentPassword")
+    )
+
+    # If credentials/host settings changed, bypass the cooldown immediately
+    if _qbt_last_failed_settings is not None and current_settings != _qbt_last_failed_settings:
+        logger.info("qBittorrent connection settings changed. Resetting connection backoff cooldown.")
+        _qbt_last_failed_settings = None
+        _qbt_consecutive_failures = 0
+        _qbt_cooldown_until = 0.0
+
     if _qbt_client is not None:
         # If connection parameters in config have changed, invalidate cached client
         expected_host = normalize_host(config["qbittorrentHost"])
@@ -171,8 +190,16 @@ def get_qbt_client():
             except Exception:
                 pass
             _qbt_client = None
+            # Also reset cooldown when parameters explicitly change
+            _qbt_consecutive_failures = 0
+            _qbt_cooldown_until = 0.0
 
     if _qbt_client is None:
+        now_time = time.time()
+        if now_time < _qbt_cooldown_until:
+            # Under cool-down; return None immediately to prevent IP blocking
+            return None
+
         try:
             host = normalize_host(config["qbittorrentHost"])
             client = qbittorrentapi.Client(
@@ -187,9 +214,22 @@ def get_qbt_client():
             client.auth_log_in()
             _qbt_client = client
             logger.info("Successfully connected and authenticated with qBittorrent.")
+            # Reset failure count and cooldown on successful connection
+            _qbt_consecutive_failures = 0
+            _qbt_cooldown_until = 0.0
+            _qbt_last_failed_settings = None
         except Exception as e:
             logger.error(f"Failed to connect to qBittorrent: {e}")
             _qbt_client = None
+            _qbt_last_failed_settings = current_settings
+            _qbt_consecutive_failures += 1
+            # Exponential backoff starting at 5s, doubling, up to a max of 300s (5 minutes)
+            backoff = min(5 * (2 ** (_qbt_consecutive_failures - 1)), 300)
+            _qbt_cooldown_until = time.time() + backoff
+            logger.warning(
+                f"qBittorrent connection failed. Cool-down active. "
+                f"Will retry in {backoff} seconds (failure #{_qbt_consecutive_failures})."
+            )
     return _qbt_client
 
 # Fetch public trackers
@@ -524,7 +564,7 @@ def get_config_endpoint():
 
 @api.post("/api/config")
 def save_config_endpoint(payload: ConfigSchema):
-    global config, _qbt_client
+    global config, _qbt_client, _qbt_consecutive_failures, _qbt_cooldown_until, _qbt_last_failed_settings
     
     if payload.cronExpression.strip():
         if not croniter.is_valid(payload.cronExpression):
@@ -537,13 +577,17 @@ def save_config_endpoint(payload: ConfigSchema):
         config.get("qbittorrentUsername") != payload.qbittorrentUsername or
         config.get("qbittorrentPassword") != payload.qbittorrentPassword
     ):
-        logger.info("qBittorrent credentials updated in configuration endpoint. Resetting client.")
+        logger.info("qBittorrent credentials updated in configuration endpoint. Resetting client and backoff cooldown.")
         if _qbt_client is not None:
             try:
                 _qbt_client.auth_log_out()
             except Exception:
                 pass
             _qbt_client = None
+        # Reset cooldown statistics when credentials change
+        _qbt_consecutive_failures = 0
+        _qbt_cooldown_until = 0.0
+        _qbt_last_failed_settings = None
 
     config.update(payload.model_dump())
     save_config()
