@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import httpx
 import qbittorrentapi
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from croniter import croniter
@@ -47,6 +47,29 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(CURRENT_DIR, "agent-data"))
 CONFIG_PATH = os.path.join(STATE_DIR, "config.json")
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
+
+def get_state_file_path(filename):
+    return os.path.join(STATE_DIR, filename)
+
+def reset_qbt_client_state():
+    global _qbt_client, _qbt_last_failed_settings, _qbt_consecutive_failures, _qbt_cooldown_until
+    _qbt_client = None
+    _qbt_last_failed_settings = None
+    _qbt_consecutive_failures = 0
+    _qbt_cooldown_until = 0.0
+
+def clear_qbt_client_cache():
+    global _qbt_client
+    _qbt_client = None
+
+def is_qbt_auth_error(error):
+    return isinstance(error, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed))
+
+def resolve_static_path(path):
+    static_path = os.path.join(CURRENT_DIR, "static", path)
+    if os.path.exists(static_path):
+        return static_path
+    return os.path.join(STATE_DIR, "..", "static", path)
 
 # Default settings
 default_config = {
@@ -171,9 +194,7 @@ def get_qbt_client():
     # If credentials/host settings changed, bypass the cooldown immediately
     if _qbt_last_failed_settings is not None and current_settings != _qbt_last_failed_settings:
         logger.info("qBittorrent connection settings changed. Resetting connection backoff cooldown.")
-        _qbt_last_failed_settings = None
-        _qbt_consecutive_failures = 0
-        _qbt_cooldown_until = 0.0
+        reset_qbt_client_state()
 
     if _qbt_client is not None:
         # If connection parameters in config have changed, invalidate cached client
@@ -189,10 +210,7 @@ def get_qbt_client():
                 _qbt_client.auth_log_out()
             except Exception:
                 pass
-            _qbt_client = None
-            # Also reset cooldown when parameters explicitly change
-            _qbt_consecutive_failures = 0
-            _qbt_cooldown_until = 0.0
+            reset_qbt_client_state()
 
     if _qbt_client is None:
         now_time = time.time()
@@ -253,7 +271,7 @@ async def fetch_public_trackers():
 
 async def get_injectable_trackers():
     trackers = []
-    trackers_path = os.path.join(STATE_DIR, "custom_trackers.txt")
+    trackers_path = get_state_file_path("custom_trackers.txt")
     if os.path.exists(trackers_path):
         try:
             with open(trackers_path, "r") as f:
@@ -331,9 +349,8 @@ def run_orphaned_cleanup():
         }
     except Exception as e:
         logger.error(f"Error running orphaned cleaner: {e}")
-        if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
-            global _qbt_client
-            _qbt_client = None
+        if is_qbt_auth_error(e):
+            clear_qbt_client_cache()
         return {"error": str(e)}
 
 # Staged actions tracker
@@ -477,9 +494,8 @@ async def run_agent_turn():
             
     except Exception as e:
         logger.error(f"Error executing agent turn: {e}", exc_info=True)
-        if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
-            global _qbt_client
-            _qbt_client = None
+        if is_qbt_auth_error(e):
+            clear_qbt_client_cache()
 
 # Asynchronous Background Daemon Scheduler
 async def background_scheduler():
@@ -528,11 +544,8 @@ load_state()
 # Serve static web frontend
 @api.get("/", response_class=HTMLResponse)
 def read_root():
-    static_html_path = os.path.join(CURRENT_DIR, "static", "index.html")
-    # Resolve relative path fallback
-    if not os.path.exists(static_html_path):
-        static_html_path = os.path.join(STATE_DIR, "..", "static", "index.html")
-        
+    static_html_path = resolve_static_path("index.html")
+    
     try:
         with open(static_html_path, "r") as f:
             return HTMLResponse(content=f.read(), status_code=200)
@@ -583,11 +596,7 @@ def save_config_endpoint(payload: ConfigSchema):
                 _qbt_client.auth_log_out()
             except Exception:
                 pass
-            _qbt_client = None
-        # Reset cooldown statistics when credentials change
-        _qbt_consecutive_failures = 0
-        _qbt_cooldown_until = 0.0
-        _qbt_last_failed_settings = None
+        reset_qbt_client_state()
 
     config.update(payload.model_dump())
     save_config()
@@ -596,7 +605,7 @@ def save_config_endpoint(payload: ConfigSchema):
 
 @api.get("/api/trackers")
 def get_trackers_info():
-    trackers_path = os.path.join(STATE_DIR, "custom_trackers.txt")
+    trackers_path = get_state_file_path("custom_trackers.txt")
     total = 0
     if os.path.exists(trackers_path):
         try:
@@ -621,7 +630,7 @@ async def upload_trackers(file: UploadFile = File(...)):
         if not new_trackers:
             raise HTTPException(status_code=400, detail="No valid tracker URLs found. URLs must start with udp://, http://, https://, or wss://")
         
-        trackers_path = os.path.join(STATE_DIR, "custom_trackers.txt")
+        trackers_path = get_state_file_path("custom_trackers.txt")
         existing_trackers = set()
         if os.path.exists(trackers_path):
             with open(trackers_path, "r") as f:
@@ -709,9 +718,8 @@ async def inject_trackers_endpoint(torrent_hash: str):
         return {"success": True, "message": f"Successfully injected {len(trackers)} trackers."}
     except Exception as e:
         logger.error(f"Failed manual inject: {e}")
-        if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
-            global _qbt_client
-            _qbt_client = None
+        if is_qbt_auth_error(e):
+            clear_qbt_client_cache()
         raise HTTPException(status_code=500, detail=str(e))
 
 @api.post("/api/test-qbt")
@@ -768,9 +776,8 @@ def get_status_endpoint():
                 })
         except Exception as e:
             logger.error(f"Error compile status: {e}")
-            if isinstance(e, (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error, qbittorrentapi.LoginFailed)):
-                global _qbt_client
-                _qbt_client = None
+            if is_qbt_auth_error(e):
+                clear_qbt_client_cache()
     
     if not qbt_connected:
         qbt_connected = True  # Show active visual states for test view
@@ -1234,10 +1241,8 @@ def clean_orphaned_endpoint(payload: dict = None):
     return res
 
 # Mount static folder assets
-static_assets_path = os.path.join(CURRENT_DIR, "static")
-if not os.path.exists(static_assets_path):
-    static_assets_path = os.path.join(STATE_DIR, "..", "static")
-    
+static_assets_path = resolve_static_path("")
+
 api.mount("/static", StaticFiles(directory=static_assets_path), name="static")
 
 if __name__ == "__main__":
