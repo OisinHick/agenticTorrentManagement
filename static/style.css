@@ -225,16 +225,12 @@ body {
 .torrents-card {
   display: flex;
   flex-direction: column;
-  padding-bottom: 0;
 }
 
 .torrents-card .table-container {
   flex: 1;
   min-height: 0;
   max-height: none;
-  border-bottom: none;
-  border-bottom-left-radius: var(--border-radius);
-  border-bottom-right-radius: var(--border-radius);
 }
 
 /* Settings Container Scroll support */
