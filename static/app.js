@@ -399,10 +399,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function adjustPanelsHeight() {
     const settingsCard = document.querySelector('.settings-card');
+    const trackerCard = document.querySelector('.tracker-card');
+    const statusCard = document.querySelector('.status-card');
     const torrentsCard = document.querySelector('.torrents-card');
-    if (settingsCard && torrentsCard) {
+    
+    if (settingsCard && trackerCard && statusCard && torrentsCard) {
       if (window.innerWidth > 1200) {
-        torrentsCard.style.height = `${settingsCard.offsetHeight}px`;
+        // Calculate the height required to make both columns end at the same point
+        const targetHeight = settingsCard.offsetHeight + trackerCard.offsetHeight - statusCard.offsetHeight;
+        torrentsCard.style.height = `${Math.max(300, targetHeight)}px`;
       } else {
         torrentsCard.style.height = '';
       }
